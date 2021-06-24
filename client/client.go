@@ -9,7 +9,7 @@ import (
 
 var StrOut string
 
-func Client() {
+func ClientFirst() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	// url := "https://habr.com/ru"

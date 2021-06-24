@@ -2,38 +2,67 @@ package main
 
 import (
 	"./client"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
-	"time"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Serving: %s\n", r.URL.Path)
-	fmt.Fprintf(w, "GET str: %s\n", client.StrOut)
-	fmt.Printf("Served: %s\n", r.Host)
-}
-var Sout string
-func timeHandler(w http.ResponseWriter, r *http.Request) {
-	t := time.Now().Format(time.RFC1123)
-	Body := "The current time is:"
-	fmt.Fprintf(w, "<h1 align=\"center\">%s</h1>", Body)
-	fmt.Fprintf(w, "<h2 align=\"center\">%s</h2>", t)
-	fmt.Fprintf(w, "Serving: %s\n", r.URL.Path)
-	fmt.Fprintf(w, "GET str: %s\n", client.StrOut)
-	fmt.Printf("Served time for: %s\n", r.Host)
-}
+
+
 
 func main() {
-	http.HandleFunc("/", handler)
-	http.HandleFunc("/time", timeHandler)
 
+	ourNews := client.Client()
 
-	for i := 0; i < 80; i++ {
-		go client.Client()
+	http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request){
+		// отдаём обычный HTML
+		fileContents, err := ioutil.ReadFile("index.html")
+		if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
+		w.Write(fileContents)
+	})
+	http.HandleFunc("/time", func (w http.ResponseWriter, r *http.Request){
+		//str := client.Client()
+		//fmt.Fprintln(w, str)
+		fmt.Println("request ", r.URL.Path)
+		defer r.Body.Close()
 
-	err := http.ListenAndServe(":8080",nil)
+		// Switch для разных типов запросов
+		switch r.Method {
+		// GET для получения данных
+		case http.MethodGet:
+			productsJson, _ := json.Marshal(ourNews)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write(productsJson)
+		// POST для добавление чего-то нового
+		case http.MethodPost:
+			decoder := json.NewDecoder(r.Body)
+			news := client.NewsPost{}
+			// преобразуем json в структуру
+			err := decoder.Decode(&news)
+			if err != nil {
+				log.Println(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			news.UserInput.Lang = "UK"
+			news.UserInput.Size += 1
 
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+
+
+
+
+	err := http.ListenAndServe(":8081",nil)
 	if err != nil {
 		fmt.Println(err)
 		return
