@@ -26,6 +26,18 @@ func main() {
 	}
 		w.Write(fileContents)
 	})
+
+	http.HandleFunc("/google-news", func (w http.ResponseWriter, r *http.Request){
+		// Новости полученные с другого API
+		fmt.Println("request ", r.URL.Path)
+		defer r.Body.Close()
+		newNews := client.GetNews()
+		productsJson, _ := json.Marshal(newNews)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(productsJson)
+	})
+
 	http.HandleFunc("/time", func (w http.ResponseWriter, r *http.Request){
 		//str := client.Client()
 		//fmt.Fprintln(w, str)
@@ -58,8 +70,6 @@ func main() {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
-
-
 
 
 	err := http.ListenAndServe(":8081",nil)

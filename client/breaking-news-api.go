@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"encoding/json"
@@ -35,7 +35,7 @@ type News struct {
 }
 
 
-func main() {
+func GetNews() []ArcticlesArray {
 	// Данное API разрешает только 3 запроса в час
 	url := "https://google-news.p.rapidapi.com/v1/source_search?source=nytimes.com&lang=en&country=US"
 
@@ -53,11 +53,10 @@ func main() {
 	err := json.Unmarshal(body, &str)
 	if err != nil {
 		fmt.Println(err)
-		return
-	} else {
-		fmt.Println(str.Feed.Language)
+		return []ArcticlesArray{}
 	}
-	// fmt.Println(res)
-	fmt.Println(string(body))
+	return str.Articles
+
+
 
 }
