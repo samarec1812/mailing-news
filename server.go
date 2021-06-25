@@ -1,7 +1,6 @@
 package main
 
 import (
-	"./client"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,12 +8,19 @@ import (
 	"net/http"
 )
 
-
+type postsStruct struct {
+	ID string `json:"id"`
+	Date string `json:"date"`
+}
 
 
 func main() {
 
-	ourNews := client.Client()
+	posts := []postsStruct{
+		{"1", "25 Jun 21 19:06 MSK"},
+		{"2", "26 Jun 21 18:01 MSK"},
+		{"3", "27 Jun 21 20:16 MSK"},
+	}
 
 	http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request){
 		// отдаём обычный HTML
@@ -27,18 +33,9 @@ func main() {
 		w.Write(fileContents)
 	})
 
-	http.HandleFunc("/google-news", func (w http.ResponseWriter, r *http.Request){
-		// Новости полученные с другого API
-		fmt.Println("request ", r.URL.Path)
-		defer r.Body.Close()
-		newNews := client.GetNews()
-		productsJson, _ := json.Marshal(newNews)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write(productsJson)
-	})
 
-	http.HandleFunc("/time", func (w http.ResponseWriter, r *http.Request){
+
+	http.HandleFunc("/post", func (w http.ResponseWriter, r *http.Request){
 		//str := client.Client()
 		//fmt.Fprintln(w, str)
 		fmt.Println("request ", r.URL.Path)
@@ -48,23 +45,25 @@ func main() {
 		switch r.Method {
 		// GET для получения данных
 		case http.MethodGet:
-			productsJson, _ := json.Marshal(ourNews)
+			productsJson, _ := json.Marshal(posts)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(productsJson)
 		// POST для добавление чего-то нового
 		case http.MethodPost:
 			decoder := json.NewDecoder(r.Body)
-			news := client.NewsPost{}
+			news := postsStruct{}
 			// преобразуем json в структуру
 			err := decoder.Decode(&news)
+			fmt.Println(news)
 			if err != nil {
 				log.Println(err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			news.UserInput.Lang = "UK"
-			news.UserInput.Size += 1
+			posts = append(posts, news)
+
+
 
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)

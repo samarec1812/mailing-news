@@ -1,0 +1,16 @@
+GET http://localhost:8081/post
+Accept: application/json
+
+###
+### POST http://{{host}}/time
+POST http://{{host}}/post
+Content-Type: application/json
+
+{
+  "id":"9",
+  "date":"25 Jun 21 19:06 MSK"
+}
+
+###
+
+
