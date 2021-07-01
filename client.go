@@ -1,12 +1,14 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -31,6 +33,7 @@ type OptionsURL struct {
 	NumLastNews uint
 	Hash string
 	ID string
+	Archive string
 }
 
 // Извлекаем методы newRequest(), do() чтобы можно было переиспользовать во всех вызовах API
@@ -48,6 +51,7 @@ func (c *Client) newRequest(method, path, typeRequest string, opt OptionsURL, bo
 	optName := (reflect.Indirect(reflect.ValueOf(opt))).Type().Field(0).Name
 	optName2 := (reflect.Indirect(reflect.ValueOf(opt))).Type().Field(1).Name
 	optName3 := (reflect.Indirect(reflect.ValueOf(opt))).Type().Field(2).Name
+	optName4 := (reflect.Indirect(reflect.ValueOf(opt))).Type().Field(3).Name
 
 	if opt.NumLastNews != 0 {
 		q.Add(optName, fmt.Sprintf("%v", opt.NumLastNews))
@@ -57,6 +61,9 @@ func (c *Client) newRequest(method, path, typeRequest string, opt OptionsURL, bo
 	}
 	if opt.ID != "" {
 		q.Add(optName3, opt.ID)
+	}
+	if opt.Archive != "" {
+		q.Add(optName4, opt.Archive)
 	}
 
 	request.URL.RawQuery = q.Encode()
@@ -84,6 +91,7 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+
 		default:
 		}
 		return nil, err
@@ -95,6 +103,30 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 	// fmt.Println(resp.Body)
 	if resp.Header.Get("Content-Type") == "application/json" {
 		err = json.NewDecoder(resp.Body).Decode(v)
+	} else if resp.Header.Get("Content-Type") == "application/zip" {
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		zipReader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Read all the files from zip archive
+
+		for _, zipFile := range zipReader.File {
+			fmt.Println("Reading file:", zipFile.Name)
+			unzippedFileBytes, err := readZipFile(zipFile)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			_ = unzippedFileBytes // this is unzipped file bytes
+		}
+
 	} else {
 		_, err = ioutil.ReadAll(resp.Body)
 		// fmt.Println(string(text))
@@ -106,7 +138,7 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 
 
 
-// Получение всех новостей
+// Получение информации о всех новостях
 func (c *Client) GetAllNews(ctx context.Context) ([]Posts, error) {
 	opt := OptionsURL{}
 	request, err := c.newRequest("GET", "/post", "application/json", opt, nil)
@@ -147,8 +179,19 @@ func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) 
 	return posts, err
 
 
+}
 
-
+// Получение единого архива со всеми новостями
+func (c *Client) GetArchiveNews(ctx context.Context) ([]zip.File, error) {
+	opt := OptionsURL{Archive: "yes"}
+	request, err := c.newRequest("GET", "/post", "application/zip", opt, nil)
+	if err != nil {
+		return nil, err
+	}
+	var info []zip.File
+	_, err = c.doImplementation(ctx, request, info)
+	fmt.Println(info)
+	return info, err
 }
 
 var ID uint64
@@ -167,6 +210,16 @@ func NewClient(urlNew string) *Client {
 		BaseURL:    newUrl,
 		UserAgent:  "my-user-agent",
 	}
+}
+
+
+func readZipFile(zf *zip.File) ([]byte, error) {
+	f, err := zf.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return ioutil.ReadAll(f)
 }
 
 
@@ -210,8 +263,15 @@ func main() {
 		return
 	} else if getNews == nil {
 		fmt.Println("Already up to date")
-		return
 	}
 	fmt.Println(getNews)
+
+	filesArch, err := client.GetArchiveNews(ctx)
+	if err == context.DeadlineExceeded {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(reflect.TypeOf(filesArch))
+
 
 }
