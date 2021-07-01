@@ -7,10 +7,12 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"time"
 )
@@ -110,28 +112,42 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 			log.Fatal(err)
 		}
 
-		zipReader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+		out, err := os.Create("./resp.zip")
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			return resp, err
 		}
-		// Read all the files from zip archive
+		defer out.Close()
+		_, err = io.Copy(out, bytes.NewReader(body))
 
-		for _, zipFile := range zipReader.File {
-			fmt.Println("Reading file:", zipFile.Name)
-			unzippedFileBytes, err := readZipFile(zipFile)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
+		return resp, err
 
-			_ = unzippedFileBytes // this is unzipped file bytes
-		}
+	//	zipReader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//
+	//	// Read all the files from zip archive
+	//
+	//	for _, zipFile := range zipReader.File {
+	//
+	//		fmt.Println("Reading file:", zipFile.Name)
+	//		unzippedFileBytes, err := readZipFile(zipFile)
+	//		if err != nil {
+	//			log.Println(err)
+	//			continue
+	//		}
+	//
+	//		fmt.Println()
+	//		_ = unzippedFileBytes // this is unzipped file bytes
+	//	}
 
 	} else {
 		_, err = ioutil.ReadAll(resp.Body)
 		// fmt.Println(string(text))
 	}
 	return resp, err
+
 }
 
 
