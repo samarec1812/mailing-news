@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -21,8 +20,6 @@ type Posts struct {
 	ID   string `json:"id"`
 	Date string `json:"date"`
 }
-
-// Переделать application/json в другой
 
 type Client struct {
 	BaseURL    *url.URL
@@ -122,35 +119,27 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 
 		return resp, err
 
-	//	zipReader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//
-	//	// Read all the files from zip archive
-	//
-	//	for _, zipFile := range zipReader.File {
-	//
-	//		fmt.Println("Reading file:", zipFile.Name)
-	//		unzippedFileBytes, err := readZipFile(zipFile)
-	//		if err != nil {
-	//			log.Println(err)
-	//			continue
-	//		}
-	//
-	//		fmt.Println()
-	//		_ = unzippedFileBytes // this is unzipped file bytes
-	//	}
+
 
 	} else {
-		_, err = ioutil.ReadAll(resp.Body)
-		// fmt.Println(string(text))
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		out, err := os.Create("./resp.zip")
+		if err != nil {
+			log.Println(err)
+			return resp, err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, bytes.NewReader(body))
+
+
+		return resp, err
 	}
 	return resp, err
 
 }
-
-
 
 
 
@@ -166,6 +155,8 @@ func (c *Client) GetAllNews(ctx context.Context) ([]Posts, error) {
 	return posts, err
 }
 
+
+
 // Получение последних N новостей
 func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) {
 	opt := OptionsURL{NumLastNews: num}
@@ -178,6 +169,8 @@ func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) 
 	_, err = c.doImplementation(ctx, request, &posts)
 	return posts, err
 }
+
+
 
 // Получение update новости по её ID
 func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) {
@@ -197,28 +190,45 @@ func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) 
 
 }
 
+//// Получение единого архива со всеми новостями
+//func (c *Client) GetArchiveNews(ctx context.Context) ([]zip.File, error) {
+//	opt := OptionsURL{Archive: "yes"}
+//	request, err := c.newRequest("GET", "/post", "application/zip", opt, nil)
+//	if err != nil {
+//		return nil, err
+//	}
+//	var info []zip.File
+//	_, err = c.doImplementation(ctx, request, info)
+//	fmt.Println(info)
+//	return info, err
+//}
+
+
 // Получение единого архива со всеми новостями
-func (c *Client) GetArchiveNews(ctx context.Context) ([]zip.File, error) {
+func (c *Client) GetArchiveNews(ctx context.Context) ([]byte, error) {
 	opt := OptionsURL{Archive: "yes"}
-	request, err := c.newRequest("GET", "/post", "application/zip", opt, nil)
+	request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
 	if err != nil {
 		return nil, err
 	}
-	var info []zip.File
-	_, err = c.doImplementation(ctx, request, info)
+	var info []byte
+	_, err = c.doImplementation(ctx, request, &info)
 	fmt.Println(info)
 	return info, err
 }
 
-var ID uint64
 
 // Получение ID последней новости
 func (c *Client) GetLastID(ctx context.Context) (string, error) {
-
 	posts, err := c.GetAllNews(ctx)
+	if posts == nil {
+		return "", err
+	}
 	return posts[len(posts)-1].ID, err
 }
 
+
+// Создание нового клиента
 func NewClient(urlNew string) *Client {
 	newUrl, _ := url.Parse(urlNew)
 	return &Client{
@@ -229,21 +239,14 @@ func NewClient(urlNew string) *Client {
 }
 
 
-func readZipFile(zf *zip.File) ([]byte, error) {
-	f, err := zf.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return ioutil.ReadAll(f)
-}
-
 
 func main() {
+
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	client := NewClient("http://localhost:8081/")
+
 
 	post, err := client.GetAllNews(ctx)
 	if err == context.DeadlineExceeded {

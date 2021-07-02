@@ -192,19 +192,31 @@ func main() {
 
 			} else if r.FormValue("Archive") != ""   {
 
-				w.Header().Set("Content-Type", "application/zip")
-				w.Header().Set("Content-Disposition", "attachment")
-				//w.Header().Set("Content-Disposition", "form-data")
-				err := zipit("./news", "./send.zip")
+				//w.Header().Set("Content-Type", "application/zip")
+				//w.Header().Set("Content-Disposition", "attachment")
+				////w.Header().Set("Content-Disposition", "form-data")
+				//err := zipit("./news", "./send.zip")
+				//if err != nil {
+				//	log.Println(err)
+				//	return
+				//}
+				//http.ServeFile(w, r, "send.zip")
+				zipName := "./send.zip"
+				err := zipit("./news", zipName)
 				if err != nil {
-					log.Println(err)
-					return
+						log.Println(err)
+						return
+					}
+				defer os.Remove(zipName)
+				file, err := os.Open(zipName)
+				if err != nil {
+					log.Fatal(err)
 				}
+				defer file.Close()
+				mes, _ := ioutil.ReadAll(file)
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Write(mes)
 
-				// file, _ := os.Open("./news" + r.FormValue("ID") + ".zip")
-
-				// 	w.WriteHeader(http.StatusOK)
-				http.ServeFile(w, r, "send.zip")
 
 			} else {
 				if r.FormValue("NumLastNews") != "" {
@@ -260,3 +272,5 @@ func main() {
 	}
 
 }
+
+
