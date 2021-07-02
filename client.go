@@ -30,9 +30,9 @@ type Client struct {
 // Структура с параметрами запросов
 type OptionsURL struct {
 	NumLastNews uint
-	Hash string
-	ID string
-	Archive string
+	Hash        string
+	ID          string
+	Archive     string
 }
 
 // Извлекаем методы newRequest(), do() чтобы можно было переиспользовать во всех вызовах API
@@ -119,8 +119,6 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 
 		return resp, err
 
-
-
 	} else {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -134,14 +132,11 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 		defer out.Close()
 		_, err = io.Copy(out, bytes.NewReader(body))
 
-
 		return resp, err
 	}
 	return resp, err
 
 }
-
-
 
 // Получение информации о всех новостях
 func (c *Client) GetAllNews(ctx context.Context) ([]Posts, error) {
@@ -155,8 +150,6 @@ func (c *Client) GetAllNews(ctx context.Context) ([]Posts, error) {
 	return posts, err
 }
 
-
-
 // Получение последних N новостей
 func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) {
 	opt := OptionsURL{NumLastNews: num}
@@ -169,8 +162,6 @@ func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) 
 	_, err = c.doImplementation(ctx, request, &posts)
 	return posts, err
 }
-
-
 
 // Получение update новости по её ID
 func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) {
@@ -187,7 +178,6 @@ func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) 
 	_, err = c.doImplementation(ctx, request, &posts)
 	return posts, err
 
-
 }
 
 //// Получение единого архива со всеми новостями
@@ -203,7 +193,6 @@ func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) 
 //	return info, err
 //}
 
-
 // Получение единого архива со всеми новостями
 func (c *Client) GetArchiveNews(ctx context.Context) ([]byte, error) {
 	opt := OptionsURL{Archive: "yes"}
@@ -217,7 +206,6 @@ func (c *Client) GetArchiveNews(ctx context.Context) ([]byte, error) {
 	return info, err
 }
 
-
 // Получение ID последней новости
 func (c *Client) GetLastID(ctx context.Context) (string, error) {
 	posts, err := c.GetAllNews(ctx)
@@ -226,7 +214,6 @@ func (c *Client) GetLastID(ctx context.Context) (string, error) {
 	}
 	return posts[len(posts)-1].ID, err
 }
-
 
 // Создание нового клиента
 func NewClient(urlNew string) *Client {
@@ -238,15 +225,12 @@ func NewClient(urlNew string) *Client {
 	}
 }
 
-
-
 func main() {
 
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	client := NewClient("http://localhost:8081/")
-
 
 	post, err := client.GetAllNews(ctx)
 	if err == context.DeadlineExceeded {
@@ -276,7 +260,7 @@ func main() {
 
 	// Получение update по ID
 	ID := 5
-	getNews, err := client.GetUpdateByID(ctx, post[ID - 1])
+	getNews, err := client.GetUpdateByID(ctx, post[ID-1])
 	if err == context.DeadlineExceeded {
 		fmt.Println(err)
 		return
@@ -291,6 +275,5 @@ func main() {
 		return
 	}
 	fmt.Println(reflect.TypeOf(filesArch))
-
 
 }

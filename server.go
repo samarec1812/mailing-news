@@ -25,9 +25,10 @@ type postsStruct struct {
 
 type files struct {
 	FileName zip.File
-	Date string
+	Date     string
 }
 
+// createZip создаёт из структуры post соответствующий zip архив с содержанием Text и именем ID структуры
 func createZip(post postsStruct) {
 	fileTxt, err := os.Create(post.ID + ".txt")
 	if err != nil {
@@ -38,7 +39,6 @@ func createZip(post postsStruct) {
 	defer os.Remove(fileTxt.Name())
 	// закрываем текстовый
 	defer fileTxt.Close()
-
 
 	_, err = fileTxt.WriteString(post.Text)
 	// fmt.Println(post.Text)
@@ -73,7 +73,7 @@ func createZip(post postsStruct) {
 		return
 	}
 	writer.Write([]byte(post.Text))
-	_, err = io.Copy(writer, fileTxt)
+	// _, err = io.Copy(writer, fileTxt)
 	//if err != nil {
 	//	log.Println(err)
 	//	return
@@ -81,7 +81,7 @@ func createZip(post postsStruct) {
 
 }
 
-
+// функция генерирует из source каталога/файла zip архив с путём target
 func zipit(source, target string) error {
 	zipfile, err := os.Create(target)
 	if err != nil {
@@ -143,7 +143,6 @@ func zipit(source, target string) error {
 	return err
 }
 
-
 func main() {
 
 	posts := []postsStruct{
@@ -152,7 +151,7 @@ func main() {
 		{"3", "27 Jun 21 20:16 MSK", "Статья 3"},
 	}
 	for i := 4; i < 20; i++ {
-			posts = append(posts, postsStruct{fmt.Sprintf("%v", i),
+		posts = append(posts, postsStruct{fmt.Sprintf("%v", i),
 			time.Now().Format(time.RFC822), fmt.Sprintf("Статья %v", i)})
 	}
 
@@ -182,15 +181,15 @@ func main() {
 		switch r.Method {
 		// GET для получения данных
 		case http.MethodGet:
-			if r.FormValue("NumLastNews") == "" && r.FormValue("ID") == "" && r.FormValue("Hash") == "" && r.FormValue("Archive") == ""  {
+			if r.FormValue("NumLastNews") == "" && r.FormValue("ID") == "" && r.FormValue("Hash") == "" && r.FormValue("Archive") == "" {
 				productsJson, _ := json.Marshal(posts)
 
 				w.Header().Set("Content-Type", "application/json")
-			 	w.WriteHeader(http.StatusOK)
+				w.WriteHeader(http.StatusOK)
 
 				w.Write(productsJson)
 
-			} else if r.FormValue("Archive") != ""   {
+			} else if r.FormValue("Archive") != "" {
 
 				//w.Header().Set("Content-Type", "application/zip")
 				//w.Header().Set("Content-Disposition", "attachment")
@@ -204,9 +203,9 @@ func main() {
 				zipName := "./send.zip"
 				err := zipit("./news", zipName)
 				if err != nil {
-						log.Println(err)
-						return
-					}
+					log.Println(err)
+					return
+				}
 				defer os.Remove(zipName)
 				file, err := os.Open(zipName)
 				if err != nil {
@@ -216,7 +215,6 @@ func main() {
 				mes, _ := ioutil.ReadAll(file)
 				w.Header().Set("Content-Type", "application/octet-stream")
 				w.Write(mes)
-
 
 			} else {
 				if r.FormValue("NumLastNews") != "" {
@@ -245,9 +243,9 @@ func main() {
 						return
 					}
 					hash := sha256.New()
-					hashSum := hash.Sum([]byte(posts[ID - 1].Date))
+					hashSum := hash.Sum([]byte(posts[ID-1].Date))
 					if string(hashSum) != r.FormValue("Hash") {
-						productsJson, _ := json.Marshal(posts[ID - 1])
+						productsJson, _ := json.Marshal(posts[ID-1])
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(http.StatusOK)
 						w.Write(productsJson)
@@ -258,7 +256,6 @@ func main() {
 					}
 				}
 			}
-
 
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -272,5 +269,3 @@ func main() {
 	}
 
 }
-
-
