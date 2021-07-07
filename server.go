@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -18,15 +19,18 @@ import (
 )
 
 type postsStruct struct {
-	ID   string `json:"id"`
-	Date string `json:"date"`
-	Text string `json:"text"`
+	ID   string `json:"id" xml:"id"`
+	Date string `json:"date" xml:"date"`
+	Text string `json:"text" xml:"-"`
+	Description string `json:"description" xml:"description"`
 }
 
 type files struct {
 	FileName zip.File
 	Date     string
 }
+
+
 
 // createZip создаёт из структуры post соответствующий zip архив с содержанием Text и именем ID структуры
 func createZip(post postsStruct) {
@@ -46,7 +50,26 @@ func createZip(post postsStruct) {
 		log.Println(err)
 		return
 	}
-	newZipFile, err := os.Create("./news/" + post.ID + ".zip")
+
+	// создание директории с именами ID
+	err = os.MkdirAll("./news/" + post.ID, os.ModePerm)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// создание xml файла c описанием
+	filenameXML := "data.xml"
+	fileXML, _ := os.Create("./news/" + post.ID + "/" + filenameXML)
+	xmlWriter := io.Writer(fileXML)
+	enc := xml.NewEncoder(xmlWriter)
+	enc.Indent(" ", "    ")
+	if err := enc.Encode(post); err != nil {
+		fmt.Printf("error: %v\n", err)
+		return
+	}
+
+    // создание zip архива с новостью
+	newZipFile, err := os.Create("./news/" + post.ID + "/data.zip")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -146,13 +169,13 @@ func zipit(source, target string) error {
 func main() {
 
 	posts := []postsStruct{
-		{"1", "25 Jun 21 19:06 MSK", "Статья 1"},
-		{"2", "26 Jun 21 18:01 MSK", "Статья 2"},
-		{"3", "27 Jun 21 20:16 MSK", "Статья 3"},
+		{"1", "25 Jun 21 19:06 MSK", "Статья 1", "Статья о чём-то 1"},
+		{"2", "26 Jun 21 18:01 MSK", "Статья 2", "Статья о чём-то 2"},
+		{"3", "27 Jun 21 20:16 MSK", "Статья 3", "Статья о чём-то 3"},
 	}
 	for i := 4; i < 20; i++ {
 		posts = append(posts, postsStruct{fmt.Sprintf("%v", i),
-			time.Now().Format(time.RFC822), fmt.Sprintf("Статья %v", i)})
+			time.Now().Format(time.RFC822), fmt.Sprintf("Статья %v", i), fmt.Sprintf("Статья о чём-то %v", i)})
 	}
 
 	for i := 0; i < len(posts); i++ {
@@ -206,7 +229,7 @@ func main() {
 					log.Println(err)
 					return
 				}
-				defer os.Remove(zipName)
+				// defer os.Remove(zipName)
 				file, err := os.Open(zipName)
 				if err != nil {
 					log.Fatal(err)
@@ -235,21 +258,24 @@ func main() {
 
 					w.WriteHeader(http.StatusOK)
 					w.Write(productsJson)
-				} else if r.FormValue("ID") != "" && r.FormValue("Hash") != "" {
-					ID, err := strconv.Atoi(r.FormValue("ID"))
+				} else if r.FormValue("Hash") != "" {
+					file, _ := os.Open("./send.zip")
+					defer file.Close()
+
+					bytesReadZIP, err := ioutil.ReadAll(file)
 					if err != nil {
-						log.Println(err)
-						w.WriteHeader(http.StatusBadRequest)
+						fmt.Println("Ошибка чтения")
 						return
 					}
 					hash := sha256.New()
-					hashSum := hash.Sum([]byte(posts[ID-1].Date))
+					hashSum := hash.Sum(bytesReadZIP)
+
 					if string(hashSum) != r.FormValue("Hash") {
-						productsJson, _ := json.Marshal(posts[ID-1])
-						w.Header().Set("Content-Type", "application/json")
-						w.WriteHeader(http.StatusOK)
-						w.Write(productsJson)
+
+						w.Header().Set("Content-Type", "application/octet-stream")
+						w.Write(bytesReadZIP)
 					} else {
+
 						w.Header().Set("Content-Type", "text/plain")
 						w.WriteHeader(http.StatusOK)
 						w.Write([]byte("Already up to date"))

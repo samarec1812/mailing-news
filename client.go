@@ -66,7 +66,7 @@ func (c *Client) newRequest(method, path, typeRequest string, opt OptionsURL, bo
 	}
 
 	request.URL.RawQuery = q.Encode()
-	fmt.Println(request.URL.String())
+	// fmt.Println(request.URL.String())
 
 	if err != nil {
 		return nil, err
@@ -102,21 +102,16 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 	// fmt.Println(resp.Body)
 	if resp.Header.Get("Content-Type") == "application/json" {
 		err = json.NewDecoder(resp.Body).Decode(v)
-	} else if resp.Header.Get("Content-Type") == "application/zip" {
+	} else if resp.Header.Get("Content-Type") == "text/plain" {
 
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		out, err := os.Create("./resp.zip")
-		if err != nil {
-			log.Println(err)
-			return resp, err
-		}
-		defer out.Close()
-		_, err = io.Copy(out, bytes.NewReader(body))
-
+		//v, err := ioutil.ReadAll(resp.Body)
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//
+		//// v = string(body)
+		////fmt.Println(string(body))
+		//fmt.Println(string(v))
 		return resp, err
 
 	} else {
@@ -131,7 +126,7 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 		}
 		defer out.Close()
 		_, err = io.Copy(out, bytes.NewReader(body))
-
+		v = "The latest version of archive"
 		return resp, err
 	}
 	return resp, err
@@ -163,20 +158,31 @@ func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) 
 	return posts, err
 }
 
-// Получение update новости по её ID
-func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) {
-
-	hash := sha256.New()
-	hashSum := hash.Sum([]byte(post.Date))
-	fmt.Println(string(hashSum))
-	opt := OptionsURL{Hash: string(hashSum), ID: post.ID}
-	request, err := c.newRequest("GET", "/post", "application/json", opt, nil)
+// Получение update новостей
+func (c *Client) GetUpdate(ctx context.Context) (string, error) {
+	var checkUpdate []byte // если checkUpdate пуст -
+	file, err := os.Open("./resp.zip")
 	if err != nil {
-		return nil, err
+		fmt.Println("Новостей ещё нет. Для начала загрузите архив")
+		return "", nil
 	}
-	var posts *Posts
-	_, err = c.doImplementation(ctx, request, &posts)
-	return posts, err
+	bytesReadZIP, err := ioutil.ReadAll(file)
+	if err != nil {
+		fmt.Println("Ошибка чтения")
+		return "", err
+	}
+	hash := sha256.New()
+	hashSum := hash.Sum(bytesReadZIP)
+	// fmt.Println(string(hashSum))
+	opt := OptionsURL{Hash: string(hashSum)}
+	request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := c.doImplementation(ctx, request, &checkUpdate)
+	checkUpdate, _ = ioutil.ReadAll(resp.Body)
+	return string(checkUpdate), err
 
 }
 
@@ -194,15 +200,16 @@ func (c *Client) GetUpdateByID(ctx context.Context, post Posts) (*Posts, error) 
 //}
 
 // Получение единого архива со всеми новостями
-func (c *Client) GetArchiveNews(ctx context.Context) ([]byte, error) {
+func (c *Client) GetArchiveNews(ctx context.Context) (string, error) {
+	var info string
 	opt := OptionsURL{Archive: "yes"}
 	request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	var info []byte
+
 	_, err = c.doImplementation(ctx, request, &info)
-	fmt.Println(info)
+
 	return info, err
 }
 
@@ -258,22 +265,43 @@ func main() {
 	}
 	fmt.Println(lastNews)
 
+	fmt.Println()
+	//
+	//
+	//startTime := time.Now()
 	// Получение update по ID
-	ID := 5
-	getNews, err := client.GetUpdateByID(ctx, post[ID-1])
+
+
+	//		getNews, err := client.GetUpdateByID(ctx, post[ID-1])
+	//		if err == context.DeadlineExceeded {
+	//			fmt.Println(err)
+	//			return
+	//		} else if getNews == nil {
+	//			fmt.Println("Already up to date")
+	//		}
+	//	})
+	//
+	//	secondTime := time.Now()
+	//	if secondTime.Sub(startTime).Seconds() > 50 {
+	//		timer.Stop()
+	//		break
+	//	}
+	//
+	//}
+
+
+	status, err := client.GetArchiveNews(ctx)
 	if err == context.DeadlineExceeded {
 		fmt.Println(err)
 		return
-	} else if getNews == nil {
-		fmt.Println("Already up to date")
 	}
-	fmt.Println(getNews)
+	fmt.Println(status)
 
-	filesArch, err := client.GetArchiveNews(ctx)
+
+	statusUpdate, err := client.GetUpdate(ctx)
 	if err == context.DeadlineExceeded {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(reflect.TypeOf(filesArch))
-
+	fmt.Println(statusUpdate + "nen")
 }
