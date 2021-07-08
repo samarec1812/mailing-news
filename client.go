@@ -35,6 +35,9 @@ type OptionsURL struct {
 	Archive     string
 }
 
+type Hash []byte
+
+
 // Извлекаем методы newRequest(), do() чтобы можно было переиспользовать во всех вызовах API
 func (c *Client) newRequest(method, path, typeRequest string, opt OptionsURL, body interface{}) (*http.Request, error) {
 	rel := &url.URL{Path: path}
@@ -102,19 +105,22 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 	// fmt.Println(resp.Body)
 	if resp.Header.Get("Content-Type") == "application/json" {
 		err = json.NewDecoder(resp.Body).Decode(v)
-	} else if resp.Header.Get("Content-Type") == "text/plain" {
-
-		//v, err := ioutil.ReadAll(resp.Body)
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//
-		//// v = string(body)
-		////fmt.Println(string(body))
-		//fmt.Println(string(v))
-		return resp, err
-
 	} else {
+		if resp.Header.Get("Content-Hash") == "Hash-256" {
+			fmt.Println("ЭТО ЗДЕСЬ")
+			byteArr, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = ioutil.WriteFile("./data", byteArr, 0644)
+			if err != nil {
+				log.Println(err)
+
+			}
+
+			return resp, err
+		} else {
+
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatal(err)
@@ -128,6 +134,7 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 		_, err = io.Copy(out, bytes.NewReader(body))
 		v = "The latest version of archive"
 		return resp, err
+		}
 	}
 	return resp, err
 
@@ -159,11 +166,21 @@ func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) 
 }
 
 // Получение update новостей
-func (c *Client) GetUpdate(ctx context.Context) (string, error) {
-	var checkUpdate []byte // если checkUpdate пуст -
+func (c *Client) GetNews(ctx context.Context) (string, error) {
+
 	file, err := os.Open("./resp.zip")
 	if err != nil {
+
 		fmt.Println("Новостей ещё нет. Для начала загрузите архив")
+
+		var info string
+		opt := OptionsURL{Archive: "yes"}
+		request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
+		if err != nil {
+			return "", err
+		}
+		_, err = c.doImplementation(ctx, request, &info)
+
 		return "", nil
 	}
 	bytesReadZIP, err := ioutil.ReadAll(file)
@@ -175,14 +192,43 @@ func (c *Client) GetUpdate(ctx context.Context) (string, error) {
 	hashSum := hash.Sum(bytesReadZIP)
 	// fmt.Println(string(hashSum))
 	opt := OptionsURL{Hash: string(hashSum)}
+
 	request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
 	if err != nil {
 		return "", err
 	}
+	//var serverHash *Hash // если checkUpdate пуст -
+	_, err = c.doImplementation(ctx, request, &[]byte{})
+	if err != nil {
+		log.Fatal(err)
+		return "", err
+	}
+	fileHash, err := os.Open("./data")
+	if err != nil {
+		log.Fatal(err)
+		return "", err
+	}
+	bytesReadHash, err := ioutil.ReadAll(fileHash)
+	if err != nil {
+		log.Fatal(err)
+		return "", err
+	}
+	if string(hashSum) == string(bytesReadHash) {
+		fmt.Println("Данные актуальны")
+		return "", err
+	} else {
+		fmt.Println("Новости обновлены")
+		var info string
+		opt := OptionsURL{Archive: "yes"}
+		request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
+		if err != nil {
+			return "", err
+		}
+		_, err = c.doImplementation(ctx, request, &info)
 
-	resp, err := c.doImplementation(ctx, request, &checkUpdate)
-	checkUpdate, _ = ioutil.ReadAll(resp.Body)
-	return string(checkUpdate), err
+	}
+
+	return "", err
 
 }
 
@@ -290,15 +336,15 @@ func main() {
 	//}
 
 
-	status, err := client.GetArchiveNews(ctx)
-	if err == context.DeadlineExceeded {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(status)
+	//status, err := client.GetArchiveNews(ctx)
+	//if err == context.DeadlineExceeded {
+	//	fmt.Println(err)
+	//	return
+	//}
+	//fmt.Println(status)
 
 
-	statusUpdate, err := client.GetUpdate(ctx)
+	statusUpdate, err := client.GetNews(ctx)
 	if err == context.DeadlineExceeded {
 		fmt.Println(err)
 		return
