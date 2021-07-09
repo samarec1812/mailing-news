@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/otiai10/copy"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +30,6 @@ type files struct {
 	FileName zip.File
 	Date     string
 }
-
 
 
 // createZip создаёт из структуры post соответствующий zip архив с содержанием Text и именем ID структуры
@@ -170,12 +171,38 @@ func zipit(source, target string) error {
 	return err
 }
 
+type IDFiles struct {
+	IDint int
+	IDstr string
+}
+// возвращает массив c именами файлов
+func GetArrayLastFiles(lastNumPost int) []IDFiles {
+	files, err := ioutil.ReadDir("./news")
+	if err != nil {
+		log.Fatal(err)
+	}
+	arrayLastFiles := make([]IDFiles, 0)
+
+	for _, file := range files {
+		num, err := strconv.Atoi(file.Name())
+		if err != nil {
+			return []IDFiles{}
+		}
+		arrayLastFiles = append(arrayLastFiles, IDFiles{num, file.Name()})
+	}
+	sort.Slice(arrayLastFiles, func(i, j int) bool {
+		return arrayLastFiles[i].IDint < arrayLastFiles[j].IDint
+	})
+	return arrayLastFiles[len(arrayLastFiles) -lastNumPost:]
+}
+
+
 func main() {
 
 	posts := []postsStruct{
 		{"1", "25 Jun 21 19:06 MSK", "Статья 1", "Статья о чём-то 1"},
 		{"2", "26 Jun 21 18:01 MSK", "Статья 2", "Статья о чём-то 2"},
-		{"3", "27 Jun 21 20:16 MSK", "Статья 3ss", "Статья о чём-то 3"},
+		{"3", "27 Jun 21 20:16 MSK", "Статья 3", "Статья о чём-то 3"},
 	}
 	for i := 4; i < 20; i++ {
 		posts = append(posts, postsStruct{fmt.Sprintf("%v", i),
@@ -247,12 +274,42 @@ func main() {
 						w.WriteHeader(http.StatusBadRequest)
 						return
 					}
+					dirNameLastNews := "./lastnews"
+					// lastFiles слайс с именами последних n новостей
+					lastFiles := GetArrayLastFiles(lastNumPost)
+					for _, value := range lastFiles {
+						// outputDir := "./newnews/"+file.Name()+"/"
+						err = copy.Copy("./news/"+value.IDstr+"/", dirNameLastNews + "/" + value.IDstr)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+					}
+					defer os.RemoveAll(dirNameLastNews)
+					zipNameLastNews := "./lastnews.zip"
+					err = zipit("./lastnews", zipNameLastNews)
+					if err != nil {
+						log.Println(err)
+						return
+					}
 
-					productsJson, _ := json.Marshal(posts[len(posts)-lastNumPost:])
-					w.Header().Set("Content-Type", "application/json")
+					defer os.Remove(zipNameLastNews)
+					file, err := os.Open(zipNameLastNews)
+					if err != nil {
+						log.Fatal(err)
+					}
+					defer file.Close()
+					mes, _ := ioutil.ReadAll(file)
+					w.Header().Set("Content-Type", "application/octet-stream")
+					w.Header().Add("Content-News", "lastnews")
+					w.Write(mes)
 
-					w.WriteHeader(http.StatusOK)
-					w.Write(productsJson)
+
+					//productsJson, _ := json.Marshal(posts[len(posts)-lastNumPost:])
+					//w.Header().Set("Content-Type", "application/json")
+					//
+					//w.WriteHeader(http.StatusOK)
+					//w.Write(productsJson)
 				} else if r.FormValue("Hash") != "" {
 					file, _ := os.Open("./send.zip")
 					defer file.Close()

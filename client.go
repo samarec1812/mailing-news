@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -35,7 +36,9 @@ type OptionsURL struct {
 	Archive     string
 }
 
-type Hash []byte
+type Hash struct {
+	HashStr []byte `json:"hash_str"`
+}
 
 
 // Извлекаем методы newRequest(), do() чтобы можно было переиспользовать во всех вызовах API
@@ -107,17 +110,29 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 		err = json.NewDecoder(resp.Body).Decode(v)
 	} else {
 		if resp.Header.Get("Content-Hash") == "Hash-256" {
-			fmt.Println("ЭТО ЗДЕСЬ")
+
 			byteArr, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = ioutil.WriteFile("./data", byteArr, 0644)
+			err = ioutil.WriteFile("./serverhash.txt", byteArr, 0644)
 			if err != nil {
 				log.Println(err)
-
 			}
 
+			return resp, err
+		} else if resp.Header.Get("Content-News") == "lastnews" {
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			out, err := os.Create("./lastNewsClient.zip")
+			if err != nil {
+				log.Println(err)
+				return resp, err
+			}
+			defer out.Close()
+			_, err = io.Copy(out, bytes.NewReader(body))
 			return resp, err
 		} else {
 
@@ -125,14 +140,13 @@ func (c *Client) doImplementation(ctx context.Context, request *http.Request, v 
 		if err != nil {
 			log.Fatal(err)
 		}
-		out, err := os.Create("./resp.zip")
+		out, err := os.Create("./client.zip")
 		if err != nil {
 			log.Println(err)
 			return resp, err
 		}
 		defer out.Close()
 		_, err = io.Copy(out, bytes.NewReader(body))
-		v = "The latest version of archive"
 		return resp, err
 		}
 	}
@@ -165,73 +179,71 @@ func (c *Client) GetNumLastNews(ctx context.Context, num uint) ([]Posts, error) 
 	return posts, err
 }
 
-// Получение update новостей
-func (c *Client) GetNews(ctx context.Context) (string, error) {
 
+
+
+
+// GetNews для получение новостей или update новостей
+func (c *Client) GetNews(ctx context.Context) (error) {
+	// Если у клиента отсутствует архив с новостями, то err != nil =>
+	// делаем запрос на получение архива новостей
 	file, err := os.Open("./resp.zip")
 	if err != nil {
-
-		fmt.Println("Новостей ещё нет. Для начала загрузите архив")
-
-		var info string
-		opt := OptionsURL{Archive: "yes"}
-		request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
-		if err != nil {
-			return "", err
-		}
-		_, err = c.doImplementation(ctx, request, &info)
-
-		return "", nil
+		err = c.GetArchiveNews(ctx)
+		return err
 	}
+
+	err = c.GetHashSumOfNews(ctx)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	// иначе клиент считывает имеющиеся байты архива и вычисляет hash сумму
 	bytesReadZIP, err := ioutil.ReadAll(file)
 	if err != nil {
 		fmt.Println("Ошибка чтения")
-		return "", err
+		return err
 	}
 	hash := sha256.New()
 	hashSum := hash.Sum(bytesReadZIP)
 	// fmt.Println(string(hashSum))
-	opt := OptionsURL{Hash: string(hashSum)}
+	// открываем файл с hash суммой сервера
+
+
+	fileHash, err := os.Open("./serverHash.txt")
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	bytesServerHash, err := ioutil.ReadAll(fileHash)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	if string(hashSum) == string(bytesServerHash) {
+		fmt.Println("Данные актуальны")
+		return err
+	} else {
+		fmt.Println("Новости обновлены")
+		err = c.GetArchiveNews(ctx)
+	}
+
+	return err
+
+}
+// GetHashSumOfNews отправляет GET запрос на получение hash суммы архива на сервере
+func (c *Client) GetHashSumOfNews(ctx context.Context) error {
+	opt := OptionsURL{Hash: "yes"}
 
 	request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
 	if err != nil {
-		return "", err
-	}
-	//var serverHash *Hash // если checkUpdate пуст -
-	_, err = c.doImplementation(ctx, request, &[]byte{})
-	if err != nil {
-		log.Fatal(err)
-		return "", err
-	}
-	fileHash, err := os.Open("./data")
-	if err != nil {
-		log.Fatal(err)
-		return "", err
-	}
-	bytesReadHash, err := ioutil.ReadAll(fileHash)
-	if err != nil {
-		log.Fatal(err)
-		return "", err
-	}
-	if string(hashSum) == string(bytesReadHash) {
-		fmt.Println("Данные актуальны")
-		return "", err
-	} else {
-		fmt.Println("Новости обновлены")
-		var info string
-		opt := OptionsURL{Archive: "yes"}
-		request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
-		if err != nil {
-			return "", err
-		}
-		_, err = c.doImplementation(ctx, request, &info)
-
+		return err
 	}
 
-	return "", err
-
+	_, err = c.doImplementation(ctx, request, struct{}{})
+	return err
 }
-
 //// Получение единого архива со всеми новостями
 //func (c *Client) GetArchiveNews(ctx context.Context) ([]zip.File, error) {
 //	opt := OptionsURL{Archive: "yes"}
@@ -245,18 +257,17 @@ func (c *Client) GetNews(ctx context.Context) (string, error) {
 //	return info, err
 //}
 
-// Получение единого архива со всеми новостями
-func (c *Client) GetArchiveNews(ctx context.Context) (string, error) {
+// GetArchiveNews отправляет GET запрос на получение единого архива со всеми новостями
+func (c *Client) GetArchiveNews(ctx context.Context) (error) {
 	var info string
 	opt := OptionsURL{Archive: "yes"}
 	request, err := c.newRequest("GET", "/post", "application/octet-stream", opt, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
-
 	_, err = c.doImplementation(ctx, request, &info)
 
-	return info, err
+	return err
 }
 
 // Получение ID последней новости
@@ -344,10 +355,10 @@ func main() {
 	//fmt.Println(status)
 
 
-	statusUpdate, err := client.GetNews(ctx)
+	err = client.GetNews(ctx)
 	if err == context.DeadlineExceeded {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(statusUpdate + "nen")
+	fmt.Println("Данные получены")
 }
